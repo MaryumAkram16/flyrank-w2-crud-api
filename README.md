@@ -57,6 +57,7 @@ content-type: application/json
 - Restarted the server 3 times after seeding — task count stayed at exactly 3, no duplicates (Stage 0).
 - `GET /tasks` and `GET /tasks/999` confirmed reading live from `tasks.db`, with 200 and 404 as expected (Stage 1).
 - Created a task via `POST /tasks`, restarted the server, and confirmed it was still present via `GET /tasks` (Stage 2) — the first time data has survived a restart in this project.
+- Created, updated (`PUT`), and deleted (`DELETE`) a task, restarted the server, and confirmed the delete held — the task did not reappear (Stage 3).
 
 ## Swagger UI
 
