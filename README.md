@@ -58,6 +58,7 @@ content-type: application/json
 - `GET /tasks` and `GET /tasks/999` confirmed reading live from `tasks.db`, with 200 and 404 as expected (Stage 1).
 - Created a task via `POST /tasks`, restarted the server, and confirmed it was still present via `GET /tasks` (Stage 2) — the first time data has survived a restart in this project.
 - Created, updated (`PUT`), and deleted (`DELETE`) a task, restarted the server, and confirmed the delete held — the task did not reappear (Stage 3).
+- Deleted `tasks.db` entirely and restarted the server — the database file, `tasks` table, and 3 seed tasks were all recreated automatically from scratch, with fresh ids starting at 1 (Stage 5) — confirming a clean clone of this repo works with zero manual setup.
 
 ## Explored SQLite by hand (Stage 4)
 
