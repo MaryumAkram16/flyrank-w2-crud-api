@@ -65,7 +65,16 @@ Full CRUD cycle tested through Swagger UI, including validation and error handli
 **Delete (204)**
 ![Delete success](screenshots/delete-task-1.2.PNG)
 
+## Extras implemented
+
+Beyond the required CRUD endpoints, this API also includes:
+- Filtering: `GET /tasks?done=true`
+- Search: `GET /tasks?search=milk`
+- Stats: `GET /stats` → task counts
+- Seed reset: `POST /reset` → restores the 3 example tasks
+
 ## Notes
 
 - Data is in-memory only — restarting the server resets it back to the 3 seed tasks (or call `POST /reset` any time).
 - FastAPI's default validation returns 422 for missing required fields. Since the spec asks for 400 on invalid input, `title` is defined as optional in the schema and validated manually in the route, so a missing/empty title returns 400 instead of FastAPI's default 422.
+- Error responses use the key `"detail"` (e.g. `{"detail": "Task 99 not found"}`), which is FastAPI's default convention for `HTTPException` — functionally the same as the `"error"` key shown in the assignment spec.
