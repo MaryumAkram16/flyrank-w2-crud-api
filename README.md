@@ -1,6 +1,6 @@
 # Task API
 
-A small CRUD API for managing a to-do list, built with FastAPI. Data is stored in memory (no database) — it resets when the server restarts.
+A small CRUD API for managing a to-do list, built with FastAPI. Data is stored in a SQLite database (`tasks.db`) — it survives server restarts.
 
 ## Run it
 
@@ -11,9 +11,17 @@ pip install fastapi uvicorn
 uvicorn main:app --port 8000 --reload
 ```
 
+The first run automatically creates `tasks.db` in this folder, creates the `tasks` table if it doesn't exist, and seeds 3 example tasks only if the table is empty.
+
 Then open:
 - API root: http://localhost:8000/
 - Interactive docs (Swagger UI): http://localhost:8000/docs
+
+## Why SQLite
+
+- Single file (`tasks.db`), zero setup — no separate database server to install or run.
+- Perfect for a small project like this, where the whole point is proving persistence works, not scaling to production traffic.
+- The database file is git-ignored, so every clone of this repo starts fresh with its own `tasks.db`, created automatically on first run.
 
 ## Endpoints
 
@@ -29,6 +37,8 @@ Then open:
 | GET    | `/stats`          | Task counts (`total`, `done`, `open`) | 200     | — |
 | POST   | `/reset`          | Reset to the 3 seed tasks             | 200     | — |
 
+All CRUD operations use parameterized SQL queries (`?` placeholders) — no user input is ever glued directly into a SQL string.
+
 ## Example request
 
 ```
@@ -41,6 +51,12 @@ content-type: application/json
 
 {"id":4,"title":"Buy milk","done":false}
 ```
+
+## Persistence verified
+
+- Restarted the server 3 times after seeding — task count stayed at exactly 3, no duplicates (Stage 0).
+- `GET /tasks` and `GET /tasks/999` confirmed reading live from `tasks.db`, with 200 and 404 as expected (Stage 1).
+- Created a task via `POST /tasks`, restarted the server, and confirmed it was still present via `GET /tasks` (Stage 2) — the first time data has survived a restart in this project.
 
 ## Swagger UI
 
@@ -68,20 +84,17 @@ Full CRUD cycle tested through Swagger UI, including validation and error handli
 ## Extras implemented
 
 Beyond the required CRUD endpoints, this API also includes:
-- Filtering: `GET /tasks?done=true`
-- Search: `GET /tasks?search=milk`
-- Stats: `GET /stats` → task counts
+- Filtering: `GET /tasks?done=true` (SQL `WHERE done = ?`)
+- Search: `GET /tasks?search=milk` (SQL `LIKE`)
+- Stats: `GET /stats` → task counts, computed with SQL `COUNT(*)`
 - Seed reset: `POST /reset` → restores the 3 example tasks
-
-## Observation: in-memory data is temporary
-
-Restarting the server wipes all tasks and restores the 3 seed tasks — nothing persists between runs because the data lives only in a Python list in memory. This is the exact limitation Week 3 addresses by introducing a real database.
 
 ## Notes
 
-- Data is in-memory only — restarting the server resets it back to the 3 seed tasks (or call `POST /reset` any time).
+- Data now lives in `tasks.db` — restarting the server no longer wipes it. Call `POST /reset` any time to restore the 3 seed tasks.
 - FastAPI's default validation returns 422 for missing required fields. Since the spec asks for 400 on invalid input, `title` is defined as optional in the schema and validated manually in the route, so a missing/empty title returns 400 instead of FastAPI's default 422.
 - Error responses use the key `"detail"` (e.g. `{"detail": "Task 99 not found"}`), which is FastAPI's default convention for `HTTPException` — functionally the same as the `"error"` key shown in the assignment spec.
+
 ## AI vs me (Stage 7 bonus)
 
 See [ai-version/ai-vs-me.md](ai-version/ai-vs-me.md) for the full comparison between my hand-built API and an AI-generated version, including the rematch result.
