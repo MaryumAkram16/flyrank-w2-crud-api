@@ -73,6 +73,10 @@ Beyond the required CRUD endpoints, this API also includes:
 - Stats: `GET /stats` → task counts
 - Seed reset: `POST /reset` → restores the 3 example tasks
 
+## Observation: in-memory data is temporary
+
+Restarting the server wipes all tasks and restores the 3 seed tasks — nothing persists between runs because the data lives only in a Python list in memory. This is the exact limitation Week 3 addresses by introducing a real database.
+
 ## Notes
 
 - Data is in-memory only — restarting the server resets it back to the 3 seed tasks (or call `POST /reset` any time).
