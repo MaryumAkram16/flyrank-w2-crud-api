@@ -82,3 +82,6 @@ Restarting the server wipes all tasks and restores the 3 seed tasks — nothing 
 - Data is in-memory only — restarting the server resets it back to the 3 seed tasks (or call `POST /reset` any time).
 - FastAPI's default validation returns 422 for missing required fields. Since the spec asks for 400 on invalid input, `title` is defined as optional in the schema and validated manually in the route, so a missing/empty title returns 400 instead of FastAPI's default 422.
 - Error responses use the key `"detail"` (e.g. `{"detail": "Task 99 not found"}`), which is FastAPI's default convention for `HTTPException` — functionally the same as the `"error"` key shown in the assignment spec.
+## AI vs me (Stage 7 bonus)
+
+See [ai-version/ai-vs-me.md](ai-version/ai-vs-me.md) for the full comparison between my hand-built API and an AI-generated version, including the rematch result.
