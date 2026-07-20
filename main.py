@@ -4,6 +4,11 @@ from typing import Optional
 
 app = FastAPI(title="Task API", version="1.0")
 
+"""
+Task API — in-memory CRUD service for managing a to-do list.
+Endpoints: GET /, GET /health, GET/POST /tasks, GET/PUT/DELETE /tasks/{id}, GET /stats, POST /reset.
+"""
+
 # ---- In-memory "database" ----
 tasks = [
     {"id": 1, "title": "Buy milk", "done": False},
