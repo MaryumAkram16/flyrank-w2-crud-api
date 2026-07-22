@@ -6,26 +6,17 @@ A small CRUD API for managing a to-do list, built with FastAPI. Data is stored i
 
 **Prerequisites:** Docker Desktop installed and running.
 
-**1. Start Postgres in a container** (first time only — the volume `taskdata` keeps your data across restarts):
-```bash
-docker run --name taskdb -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=tasks -p 5432:5432 -v taskdata:/var/lib/postgresql -d postgres
-```
-
-**2. Set up your environment:**
+**1. Set up your environment:**
 ```bash
 copy .env.example .env
 ```
 (`.env` is git-ignored — it holds your real connection string. `.env.example` is the committed template.)
 
-**3. Install dependencies and run the app:**
+**2. Start the whole stack with one command:**
 ```bash
-python -m venv venv
-venv\Scripts\activate        # Windows
-pip install -r requirements.txt
-uvicorn main:app --port 8000 --reload
+docker compose up
 ```
-
-The app connects to Postgres on startup, creates the `tasks` table if it doesn't exist, and seeds 3 example tasks only if the table is empty.
+This builds the app image, starts Postgres, waits for it to be healthy, then starts the app. The app connects on startup, creates the `tasks` table if it doesn't exist, and seeds 3 example tasks only if the table is empty.
 
 Then open:
 - API root: http://localhost:8000/
@@ -37,6 +28,7 @@ Then open:
 - Docker means no local Postgres install, no version conflicts — the official `postgres` image behaves identically on any machine.
 - A named Docker volume (`taskdata`) keeps the data even if the container is removed and recreated.
 - Credentials live in `.env` (git-ignored), never hardcoded or committed — `.env.example` documents which keys are needed.
+- `api` waits for `db` to report healthy (via a `pg_isready` healthcheck) before starting — without this, the app can crash on a race condition where it tries to connect before Postgres has finished its first-time initialization.
 
 ## Endpoints
 
@@ -67,12 +59,27 @@ content-type: application/json
 {"id":4,"title":"Buy milk","done":false}
 ```
 
+## Data in Postgres
+
+Confirmed directly inside the running container:
+
+```bash
+docker compose exec db psql -U postgres -d tasks -c "\dt"
+```
+![tasks table exists](screenshots/postgres-dt.PNG)
+
+```bash
+docker compose exec db psql -U postgres -d tasks -c "SELECT * FROM tasks;"
+```
+![seeded rows](screenshots/postgres-select.PNG)
+
 ## Postgres migration verified
 
 - Connected the app to Postgres via `.env`/`DATABASE_URL`, confirmed the `tasks` table and 3 seed rows exist both through `GET /tasks` and directly via `psql` inside the container (Stage 1).
 - Restarted the app 3 times — task count stayed at exactly 3 in Postgres, no duplicate seeding.
 - Full CRUD cycle (create, update, delete) tested against Postgres with correct status codes (201, 200, 204, 404), confirmed via `GET /tasks` after each step (Stages 2-3).
-- - Simulated a clean clone: wiped the Docker volume, removed the built image, deleted `.env`, recreated it from `.env.example`, and ran `docker compose up` from nothing. `GET /tasks` returned the 3 seeded tasks with fresh ids starting at 1 (Stage 5) — a stranger cloning this repo gets a working stack with zero manual database setup.
+- Brought up the whole stack with `docker compose up`, created a task, then ran a full `docker compose down` and `up` again — the task was still there, proving the volume keeps data across a complete teardown, not just a container restart (Stage 4).
+- Simulated a clean clone: wiped the Docker volume, removed the built image, deleted `.env`, recreated it from `.env.example`, and ran `docker compose up` from nothing. `GET /tasks` returned the 3 seeded tasks with fresh ids starting at 1 (Stage 5) — a stranger cloning this repo gets a working stack with zero manual database setup.
 
 ## Explored SQLite by hand (A2, historical)
 
@@ -124,6 +131,7 @@ Beyond the required CRUD endpoints, this API also includes:
 - FastAPI's default validation returns 422 for missing required fields. Since the spec asks for 400 on invalid input, `title` is defined as optional in the schema and validated manually in the route, so a missing/empty title returns 400 instead of FastAPI's default 422.
 - Error responses use the key `"detail"` (e.g. `{"detail": "Task 99 not found"}`), which is FastAPI's default convention for `HTTPException` — functionally the same as the `"error"` key shown in the assignment spec.
 - Postgres 18's official image expects the volume mounted at `/var/lib/postgresql` (not `/var/lib/postgresql/data` as in older guides) — using the old path causes the container to fail on startup with a version-mismatch error.
+- `depends_on` alone only waits for a container to *start*, not for the service inside it to be ready — a healthcheck (`pg_isready`) plus `condition: service_healthy` closes that gap so the app doesn't try to connect before Postgres is actually accepting connections.
 
 ## AI vs me (Stage 7 bonus, from A1)
 
