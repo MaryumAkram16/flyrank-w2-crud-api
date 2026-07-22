@@ -72,6 +72,7 @@ content-type: application/json
 - Connected the app to Postgres via `.env`/`DATABASE_URL`, confirmed the `tasks` table and 3 seed rows exist both through `GET /tasks` and directly via `psql` inside the container (Stage 1).
 - Restarted the app 3 times — task count stayed at exactly 3 in Postgres, no duplicate seeding.
 - Full CRUD cycle (create, update, delete) tested against Postgres with correct status codes (201, 200, 204, 404), confirmed via `GET /tasks` after each step (Stages 2-3).
+- - Simulated a clean clone: wiped the Docker volume, removed the built image, deleted `.env`, recreated it from `.env.example`, and ran `docker compose up` from nothing. `GET /tasks` returned the 3 seeded tasks with fresh ids starting at 1 (Stage 5) — a stranger cloning this repo gets a working stack with zero manual database setup.
 
 ## Explored SQLite by hand (A2, historical)
 
