@@ -1,34 +1,49 @@
 # Task API
 
-A small CRUD API for managing a to-do list, built with FastAPI. Data is stored in a SQLite database (`tasks.db`) — it survives server restarts.
+A small CRUD API for managing a to-do list, built with FastAPI. Data is stored in PostgreSQL, running in Docker — it survives restarts of both the app and the database container.
 
 ## Run it
 
+**Prerequisites:** Docker Desktop installed and running.
+
+**1. Start Postgres in a container** (first time only — the volume `taskdata` keeps your data across restarts):
+```bash
+docker run --name taskdb -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=tasks -p 5432:5432 -v taskdata:/var/lib/postgresql -d postgres
+```
+
+**2. Set up your environment:**
+```bash
+copy .env.example .env
+```
+(`.env` is git-ignored — it holds your real connection string. `.env.example` is the committed template.)
+
+**3. Install dependencies and run the app:**
 ```bash
 python -m venv venv
 venv\Scripts\activate        # Windows
-pip install fastapi uvicorn
+pip install -r requirements.txt
 uvicorn main:app --port 8000 --reload
 ```
 
-The first run automatically creates `tasks.db` in this folder, creates the `tasks` table if it doesn't exist, and seeds 3 example tasks only if the table is empty.
+The app connects to Postgres on startup, creates the `tasks` table if it doesn't exist, and seeds 3 example tasks only if the table is empty.
 
 Then open:
 - API root: http://localhost:8000/
 - Interactive docs (Swagger UI): http://localhost:8000/docs
 
-## Why SQLite
+## Why Postgres in Docker
 
-- Single file (`tasks.db`), zero setup — no separate database server to install or run.
-- Perfect for a small project like this, where the whole point is proving persistence works, not scaling to production traffic.
-- The database file is git-ignored, so every clone of this repo starts fresh with its own `tasks.db`, created automatically on first run.
+- A real database server, not just a file — the same engine used behind most production backends.
+- Docker means no local Postgres install, no version conflicts — the official `postgres` image behaves identically on any machine.
+- A named Docker volume (`taskdata`) keeps the data even if the container is removed and recreated.
+- Credentials live in `.env` (git-ignored), never hardcoded or committed — `.env.example` documents which keys are needed.
 
 ## Endpoints
 
 | Method | Path              | Description                          | Success | Errors  |
 |--------|-------------------|---------------------------------------|---------|---------|
 | GET    | `/`               | API description                       | 200     | —       |
-| GET    | `/health`         | Health check                          | 200     | —       |
+| GET    | `/health`         | Health check (also pings the database) | 200    | —       |
 | GET    | `/tasks`          | List all tasks (supports `?done=` and `?search=`) | 200 | — |
 | POST   | `/tasks`          | Create a task (`{"title": "..."}`)    | 201     | 400 (missing/empty title) |
 | GET    | `/tasks/{id}`     | Get one task                          | 200     | 404 (not found) |
@@ -37,7 +52,7 @@ Then open:
 | GET    | `/stats`          | Task counts (`total`, `done`, `open`) | 200     | — |
 | POST   | `/reset`          | Reset to the 3 seed tasks             | 200     | — |
 
-All CRUD operations use parameterized SQL queries (`?` placeholders) — no user input is ever glued directly into a SQL string.
+All CRUD operations use parameterized SQL queries (`%s` placeholders via `psycopg`) — no user input is ever glued directly into a SQL string.
 
 ## Example request
 
@@ -52,17 +67,15 @@ content-type: application/json
 {"id":4,"title":"Buy milk","done":false}
 ```
 
-## Persistence verified
+## Postgres migration verified
 
-- Restarted the server 3 times after seeding — task count stayed at exactly 3, no duplicates (Stage 0).
-- `GET /tasks` and `GET /tasks/999` confirmed reading live from `tasks.db`, with 200 and 404 as expected (Stage 1).
-- Created a task via `POST /tasks`, restarted the server, and confirmed it was still present via `GET /tasks` (Stage 2) — the first time data has survived a restart in this project.
-- Created, updated (`PUT`), and deleted (`DELETE`) a task, restarted the server, and confirmed the delete held — the task did not reappear (Stage 3).
-- Deleted `tasks.db` entirely and restarted the server — the database file, `tasks` table, and 3 seed tasks were all recreated automatically from scratch, with fresh ids starting at 1 (Stage 5) — confirming a clean clone of this repo works with zero manual setup.
+- Connected the app to Postgres via `.env`/`DATABASE_URL`, confirmed the `tasks` table and 3 seed rows exist both through `GET /tasks` and directly via `psql` inside the container (Stage 1).
+- Restarted the app 3 times — task count stayed at exactly 3 in Postgres, no duplicate seeding.
+- Full CRUD cycle (create, update, delete) tested against Postgres with correct status codes (201, 200, 204, 404), confirmed via `GET /tasks` after each step (Stages 2-3).
 
-## Explored SQLite by hand (Stage 4)
+## Explored SQLite by hand (A2, historical)
 
-Opened `tasks.db` in DB Browser for SQLite and ran queries directly against it, then confirmed the API reflected each change instantly — no server restart needed, since the API and DB Browser read the same file.
+Before this migration, the project used SQLite (`tasks.db`). The database was opened in DB Browser for SQLite and queried directly, confirming the API and browser shared the same live file with no restart needed:
 
 ```sql
 SELECT * FROM tasks;
@@ -71,15 +84,6 @@ SELECT COUNT(*) FROM tasks;
 ```
 
 ![DB Browser: count query](screenshots/db-count-query.PNG)
-
-Then ran queries that change data, and confirmed each one showed up live through `GET /tasks` with no restart:
-
-```sql
-UPDATE tasks SET done = 1;   -- marked all tasks done; confirmed via GET /tasks with no restart
-DELETE FROM tasks WHERE done = 1;  -- deleted everything; GET /tasks returned []
-```
-
-Restored the seed data afterward with `POST /reset`.
 
 ## Swagger UI
 
@@ -107,18 +111,19 @@ Full CRUD cycle tested through Swagger UI, including validation and error handli
 ## Extras implemented
 
 Beyond the required CRUD endpoints, this API also includes:
-- Filtering: `GET /tasks?done=true` (SQL `WHERE done = ?`)
-- Search: `GET /tasks?search=milk` (SQL `LIKE`)
+- Filtering: `GET /tasks?done=true` (SQL `WHERE done = %s`)
+- Search: `GET /tasks?search=milk` (SQL `ILIKE`)
 - Stats: `GET /stats` → task counts, computed with SQL `COUNT(*)`
 - Seed reset: `POST /reset` → restores the 3 example tasks
+- `/health` also runs `SELECT 1` against the database and reports `db: "ok"` — the kind of check real deploys gate on
 
 ## Notes
 
-- Data now lives in `tasks.db` — restarting the server no longer wipes it. Call `POST /reset` any time to restore the 3 seed tasks.
-- `POST /reset` deletes all rows and re-inserts the 3 seed tasks, but IDs are not reset to 1 — SQLite's `AUTOINCREMENT` keeps a permanent high-water mark, so new tasks (including reset ones) always get a higher id than any that existed before. This is intentional SQLite behavior, not a bug.
+- Data now lives in Postgres, inside a Docker volume — restarting the app or the container no longer wipes it. Call `POST /reset` any time to restore the 3 seed tasks.
 - FastAPI's default validation returns 422 for missing required fields. Since the spec asks for 400 on invalid input, `title` is defined as optional in the schema and validated manually in the route, so a missing/empty title returns 400 instead of FastAPI's default 422.
 - Error responses use the key `"detail"` (e.g. `{"detail": "Task 99 not found"}`), which is FastAPI's default convention for `HTTPException` — functionally the same as the `"error"` key shown in the assignment spec.
+- Postgres 18's official image expects the volume mounted at `/var/lib/postgresql` (not `/var/lib/postgresql/data` as in older guides) — using the old path causes the container to fail on startup with a version-mismatch error.
 
-## AI vs me (Stage 7 bonus)
+## AI vs me (Stage 7 bonus, from A1)
 
 See [ai-version/ai-vs-me.md](ai-version/ai-vs-me.md) for the full comparison between my hand-built API and an AI-generated version, including the rematch result.
