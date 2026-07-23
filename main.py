@@ -5,6 +5,7 @@ from typing import Optional
 import psycopg
 from psycopg.rows import dict_row
 from dotenv import load_dotenv
+from supabase_client import supabase
 
 load_dotenv()
 
@@ -53,6 +54,9 @@ def init_db():
 @app.on_event("startup")
 def on_startup():
     init_db()
+    # supabase_client.py raises on import if SUPABASE_URL/SUPABASE_KEY are
+    # missing, so reaching this line means the client is ready to use.
+    print("Server running and connected to Supabase")
 
 
 def row_to_task(row):
