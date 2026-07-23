@@ -6,6 +6,7 @@ import psycopg
 from psycopg.rows import dict_row
 from dotenv import load_dotenv
 from supabase_client import supabase
+from supabase_auth.errors import AuthApiError
 
 load_dotenv()
 
@@ -73,6 +74,11 @@ class TaskUpdate(BaseModel):
     done: Optional[bool] = None
 
 
+class AuthCredentials(BaseModel):
+    email: Optional[str] = None
+    password: Optional[str] = None
+
+
 # ---- Root & health ----
 @app.get("/")
 def root():
@@ -88,6 +94,41 @@ def health():
         return {"status": "ok", "db": "ok"}
     except Exception:
         return {"status": "ok", "db": "unreachable"}
+
+
+# ---- Auth ----
+@app.post("/auth/signup", status_code=201)
+def signup(credentials: AuthCredentials):
+    if not credentials.email or not credentials.password:
+        raise HTTPException(status_code=400, detail="email and password are required")
+
+    try:
+        result = supabase.auth.sign_up(
+            {"email": credentials.email, "password": credentials.password}
+        )
+    except AuthApiError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {"user": result.user.model_dump(mode="json") if result.user else None}
+
+
+@app.post("/auth/login")
+def login(credentials: AuthCredentials):
+    if not credentials.email or not credentials.password:
+        raise HTTPException(status_code=400, detail="email and password are required")
+
+    try:
+        result = supabase.auth.sign_in_with_password(
+            {"email": credentials.email, "password": credentials.password}
+        )
+    except AuthApiError:
+        raise HTTPException(status_code=401, detail="Invalid login credentials")
+
+    return {
+        "access_token": result.session.access_token,
+        "refresh_token": result.session.refresh_token,
+        "user": result.user.model_dump(mode="json") if result.user else None,
+    }
 
 
 # ---- Read ----
