@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 import psycopg
@@ -7,6 +7,7 @@ from psycopg.rows import dict_row
 from dotenv import load_dotenv
 from supabase_client import supabase
 from supabase_auth.errors import AuthApiError
+from auth import get_current_user, get_current_token
 
 load_dotenv()
 
@@ -138,30 +139,30 @@ def public_info():
 
 
 @app.get("/protected/profile")
-def protected_profile(request: Request):
-    auth_header = request.headers.get("Authorization")
-
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Access token required")
-
-    token = auth_header.removeprefix("Bearer ").strip()
-    if not token:
-        raise HTTPException(status_code=401, detail="Access token required")
-
-    try:
-        result = supabase.auth.get_user(token)
-    except AuthApiError:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    if not result or not result.user:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    user = result.user
+def protected_profile(user=Depends(get_current_user)):
     return {
         "id": user.id,
         "email": user.email,
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
+
+
+@app.get("/protected/dashboard")
+def protected_dashboard(user=Depends(get_current_user)):
+    # Second protected route reusing the exact same dependency — no new
+    # auth code, proving the guard generalizes to any route.
+    return {"message": f"Welcome to your dashboard, {user.email}."}
+
+
+@app.post("/auth/logout", status_code=204)
+def logout(token: str = Depends(get_current_token)):
+    try:
+        supabase.auth.admin.sign_out(token, "global")
+    except AuthApiError:
+        # Token was already invalid/expired — logout is a no-op either way,
+        # the end state (no valid session) is the same.
+        pass
+    return
 
 
 # ---- Read ----
