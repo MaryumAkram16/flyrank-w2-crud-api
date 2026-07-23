@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 import psycopg
@@ -129,6 +129,28 @@ def login(credentials: AuthCredentials):
         "refresh_token": result.session.refresh_token,
         "user": result.user.model_dump(mode="json") if result.user else None,
     }
+
+
+# ---- Public & protected gates ----
+@app.get("/public/info")
+def public_info():
+    return {"message": "Welcome stranger! This info is public."}
+
+
+@app.get("/protected/profile")
+def protected_profile(request: Request):
+    auth_header = request.headers.get("Authorization")
+
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Access token required")
+
+    token = auth_header.removeprefix("Bearer ").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Access token required")
+
+    # Stage 3 will replace this placeholder with real verification via
+    # supabase.auth.getUser(token). For now we only confirm a token was sent.
+    return {"message": "Token received (not yet verified)", "token_preview": token[:12] + "..."}
 
 
 # ---- Read ----
